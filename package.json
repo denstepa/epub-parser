@@ -1,6 +1,6 @@
 {
-  "name": "@gxl/epub-parser",
-  "version": "2.0.4",
+  "name": "@denstepa/epub-parser",
+  "version": "3.0.0",
   "description": "A powerful yet easy-to-use epub parser",
   "main": "lib/index.js",
   "scripts": {
