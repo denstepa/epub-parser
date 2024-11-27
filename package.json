@@ -34,11 +34,12 @@
   },
   "homepage": "https://github.com/denstepa/epub-parser#readme",
   "dependencies": {
-    "jsdom": "^15.1.1",
+    "@types/turndown": "^5.0.5",
+    "jsdom": "^25.0.1",
     "lodash": "^4.17.21",
     "node-zip": "^1.1.1",
-    "to-markdown": "^3.1.1",
-    "xml2js": "^0.4.19"
+    "turndown": "^7.2.0",
+    "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@types/jest": "^24.0.18",

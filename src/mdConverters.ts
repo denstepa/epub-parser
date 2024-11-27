@@ -33,7 +33,6 @@ export const h = {
       return `\n${hPrefix} ${innerHTML}\n\n`
     }
 
-    // 块级元素若保留原标签需添加换行符，否则临近元素渲染会出现问题
     return `\n<${hTag} id="${id}">${innerHTML.trim().split('\n').join(' ')}</${hTag}>\n\n`
   },
 }
