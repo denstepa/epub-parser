@@ -11,7 +11,7 @@ const xmlParser = new xml2js.Parser()
 
 const xmlToJs = (xml: string) => {
   return new Promise<any>((resolve, reject) => {
-    xmlParser.parseString(xml, (err: Error, object: GeneralObject) => {
+    xmlParser.parseString(xml, (err: Error | null, object: GeneralObject) => {
       if (err) {
         reject(err)
       } else {
