@@ -1,6 +1,6 @@
 {
   "name": "@denstepa/epub-parser",
-  "version": "3.0.0",
+  "version": "2.1.0",
   "description": "A powerful yet easy-to-use epub parser",
   "packageManager": "pnpm@9.14.3+sha256.652c47dac7c2b9350db4cdb9330c087d527114a0c2dff4cbac7ea9b96be928bd",
   "main": "lib/index.js",
