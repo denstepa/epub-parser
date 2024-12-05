@@ -40,6 +40,23 @@ const testFile = (filename: string) => {
   })
 }
 
+describe('parseEpub, - from Google Docs', () => {
+  const fileContent = parser(path.join(baseDir, `fixtures/file-no-structure.epub`), {
+    type: 'path',
+    expand: true,
+  })
+
+  test('Result should have structure', async () => {
+    const result = await fileContent
+    // console.log(result)
+    console.log(result.structure)
+    expect(result.structure).not.toBe(undefined)
+    expect(fileContent && typeof fileContent).toBe('object')
+  })
+
+})
+
+
 filesToBeTested.forEach((filename) => {
   testFile(filename)
 })

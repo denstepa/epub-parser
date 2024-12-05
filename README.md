@@ -66,3 +66,7 @@ The output is an object which contains `structure`, `sections`, `info`(private p
 - PRs are the best.
 
 ❤️
+
+
+# EPUB Specification:
+https://www.w3.org/TR/epub/#sec-nav-prop
