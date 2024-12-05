@@ -1,10 +1,9 @@
 import path from 'path'
-// @ts-ignore
-import toMarkdown from 'to-markdown'
 import parseLink from './parseLink'
 import parseHTML from './parseHTML'
-import * as mdConverters from './mdConverters'
+// import * as mdConverters from './mdConverters'
 import { HtmlNodeObject } from './types'
+import TurndownService from 'turndown'
 
 const isInternalUri = (uri: string) => {
   return uri.indexOf('http://') === -1 && uri.indexOf('https://') === -1
@@ -24,6 +23,7 @@ export class Section {
   htmlObjects?: HtmlNodeObject[]
   private _resourceResolver?: (path: string) => any
   private _idResolver?: (link: string) => string
+  turndownService: TurndownService
 
   constructor({ id, htmlString, resourceResolver, idResolver, expand }: ParseSectionConfig) {
     this.id = id
@@ -33,18 +33,11 @@ export class Section {
     if (expand) {
       this.htmlObjects = this.toHtmlObjects?.()
     }
+    this.turndownService = new TurndownService()
   }
 
   toMarkdown?() {
-    return toMarkdown(this.htmlString, {
-      converters: [
-        mdConverters.h,
-        mdConverters.span,
-        mdConverters.div,
-        mdConverters.img,
-        mdConverters.a,
-      ],
-    })
+    return this.turndownService.turndown(this.htmlString)
   }
 
   toHtmlObjects?() {

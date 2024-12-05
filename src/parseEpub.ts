@@ -11,7 +11,7 @@ const xmlParser = new xml2js.Parser()
 
 const xmlToJs = (xml: string) => {
   return new Promise<any>((resolve, reject) => {
-    xmlParser.parseString(xml, (err: Error, object: GeneralObject) => {
+    xmlParser.parseString(xml, (err: Error | null, object: GeneralObject) => {
       if (err) {
         reject(err)
       } else {
@@ -237,11 +237,20 @@ export class Epub {
     const content = await this._resolveXMLAsJsObject('/' + opfPath)
     const manifest = this._getManifest(content)
     const metadata = _.get(content, ['package', 'metadata'], [])
-    const tocID = _.get(content, ['package', 'spine', 0, '$', 'toc'], 'toc.xhtml');
+    const tocID = _.get(content, ['package', 'spine', 0, '$', 'toc']);
+
     // https://github.com/gaoxiaoliangz/epub-parser/issues/13
     // https://www.w3.org/publishing/epub32/epub-packages.html#sec-spine-elem
 
-    const tocPath = (_.find(manifest, { id: tocID }) || {}).href
+    let tocPath: string;
+    if (tocID) {
+      tocPath = (_.find(manifest, { id: tocID }) || {}).href
+    } else {
+      // Based on the EPUB spec, the toc file should be declared in the manifest with the property 'nav'
+      // https://www.w3.org/TR/epub/#sec-nav-prop
+      tocPath = _.find(manifest, { properties: 'nav'})?.href
+    }
+
     if (tocPath) {
       const toc = await this._resolveXMLAsJsObject(tocPath)
       this._toc = toc
