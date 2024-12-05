@@ -12,19 +12,19 @@ As it is written in TypeScript, types are already included in the package.
 ## Install
 
 ```bash
-npm install @gxl/epub-parser --save
+npm install @denstepa/epub-parser --save
 ```
 
 or if you prefer yarn
 
 ```bash
-yarn add @gxl/epub-parser
+yarn add @denstepa/epub-parser
 ```
 
 ## Usage
 
 ```js
-import { parseEpub } from '@gxl/epub-parser'
+import { parseEpub } from '@denstepa/epub-parser'
 
 const epubObj = await parseEpub('/path/to/file.epub', {
   type: 'path',

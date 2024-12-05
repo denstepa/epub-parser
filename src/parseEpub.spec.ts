@@ -49,7 +49,7 @@ describe('parseEpub, - from Google Docs', () => {
   test('Result should have structure', async () => {
     const result = await fileContent
     // console.log(result)
-    console.log(result.structure)
+    // console.log(result.structure)
     expect(result.structure).not.toBe(undefined)
     expect(fileContent && typeof fileContent).toBe('object')
   })
