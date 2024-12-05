@@ -18,7 +18,7 @@ jobs:
       - uses: pnpm/action-setup@v4.0.0
       - run: pnpm install
       - run: pnpm run build
-      - run: npm run test
+      - run: pnpm run test
 
   publish-npm:
     needs: build
