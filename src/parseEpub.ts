@@ -67,6 +67,7 @@ export class Epub {
   private _spine?: string[] // array of ids defined in manifest
   private _toc?: GeneralObject
   private _metadata?: GeneralObject
+  private turndownService?: TurndownService
   structure?: StructureItem[];
   info?: {
     title: string
@@ -264,6 +265,7 @@ export class Epub {
     this._metadata = metadata
     this.info = parseMetadata(metadata)
     this.sections = this._resolveSectionsFromSpine(expand)
+    this.turndownService = new TurndownService();
 
     return this
   }
@@ -300,7 +302,6 @@ export class Epub {
   }
 
   _getContentFromSameFile(items: StructureItem[], nextParent?: StructureItem): StructureItem[] {
-    // const turndownService = new TurndownService();
 
     const itemsWithContent = items.map((item: StructureItem, index: number) => {
       const path = this.resolvePath(item.path.split('#').shift() as string);
@@ -317,6 +318,7 @@ export class Epub {
         }
       }
       item.content = getHTMLNodesBetweenNodes(item);
+      item.markdownContent = item.content && this.turndownService!.turndown(item.content)
       // console.log('item.content', item.name, item.nodeId, item.nextNodeId, item.content && turndownService.turndown(item.content))
 
       if (item.children) {
@@ -336,6 +338,7 @@ export class Epub {
       item.file = this._zip.files[path] as EPubFile;
 
       item.content = item.file._data;
+      item.markdownContent = item.content && this.turndownService!.turndown(item.content)
 
       if (item.children) {
         item.children = this._getContentPerFile(item.children);

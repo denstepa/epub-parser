@@ -25,6 +25,7 @@ export type StructureItem = {
   filePath?: string
   file?: EPubFile
   content?: any
+  markdownContent?: string
 }
 
 export interface EPubFile {
