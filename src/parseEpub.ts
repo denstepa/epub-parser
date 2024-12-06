@@ -67,7 +67,7 @@ export class Epub {
   private _spine?: string[] // array of ids defined in manifest
   private _toc?: GeneralObject
   private _metadata?: GeneralObject
-  private turndownService?: TurndownService
+  private turndownService: TurndownService
   structure?: StructureItem[];
   info?: {
     title: string
@@ -78,6 +78,7 @@ export class Epub {
 
   constructor(buffer: Buffer) {
     this._zip = new nodeZip(buffer, { binary: true, base64: false, checkCRC32: true })
+    this.turndownService = new TurndownService();
   }
 
   resolve(path: string): { asText: () => string } {
@@ -265,8 +266,6 @@ export class Epub {
     this._metadata = metadata
     this.info = parseMetadata(metadata)
     this.sections = this._resolveSectionsFromSpine(expand)
-    this.turndownService = new TurndownService();
-
     return this
   }
 
