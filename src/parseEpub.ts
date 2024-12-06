@@ -5,7 +5,10 @@ import _ from 'lodash'
 import nodeZip from 'node-zip'
 import parseLink from './parseLink'
 import parseSection, { Section } from './parseSection'
-import { GeneralObject } from './types'
+import { EPubFile, GeneralObject, StructureItem } from './types'
+import parseHTML from './parseHTML'
+import { JSDOM } from 'jsdom';
+import TurndownService from 'turndown'
 
 const xmlParser = new xml2js.Parser()
 
@@ -64,7 +67,7 @@ export class Epub {
   private _spine?: string[] // array of ids defined in manifest
   private _toc?: GeneralObject
   private _metadata?: GeneralObject
-  structure?: GeneralObject
+  structure?: StructureItem[];
   info?: {
     title: string
     author: string
@@ -76,11 +79,7 @@ export class Epub {
     this._zip = new nodeZip(buffer, { binary: true, base64: false, checkCRC32: true })
   }
 
-  resolve(
-    path: string,
-  ): {
-    asText: () => string
-  } {
+  resolve(path: string): { asText: () => string } {
     let _path
     if (path[0] === '/') {
       // use absolute path, root is zip root
@@ -130,11 +129,11 @@ export class Epub {
     )
   }
 
-  _genStructureForHTML(tocObj: GeneralObject) {
+  _genStructureForHTML(tocObj: GeneralObject): StructureItem[] {
     const tocRoot = tocObj.html.body[0].nav[0]['ol'][0].li;
     let runningIndex = 1;
 
-    const parseHTMLNavPoints = (navPoint: GeneralObject) => {
+    const parseHTMLNavPoints = (navPoint: GeneralObject): StructureItem => {
       const element = navPoint.a[0] || {};
       const path = element['$'].href;
       let name = element['_'];
@@ -161,10 +160,10 @@ export class Epub {
         path,
         playOrder,
         children,
-      };
+      } as StructureItem; 
     };
 
-    const parseOuterHTML = (collection: GeneralObject[]) => {
+    const parseOuterHTML = (collection: GeneralObject[]): StructureItem[] => {
       return collection.map((point) => {
         return parseHTMLNavPoints(point);
       });
@@ -173,18 +172,18 @@ export class Epub {
     return parseOuterHTML(tocRoot);
   }
 
-  _genStructure(tocObj: GeneralObject, resolveNodeId = false) {
+  _genStructure(tocObj: GeneralObject, resolveNodeId = false): StructureItem[] {
     if (tocObj.html) {
       return this._genStructureForHTML(tocObj);
     }
 
     const rootNavPoints = _.get(tocObj, ['ncx', 'navMap', '0', 'navPoint'], [])
 
-    const parseNavPoint = (navPoint: GeneralObject) => {
+    const parseNavPoint = (navPoint: GeneralObject): StructureItem => {
       // link to section
       const path = _.get(navPoint, ['content', '0', '$', 'src'], '')
       const name = _.get(navPoint, ['navLabel', '0', 'text', '0'])
-      const playOrder = _.get(navPoint, ['$', 'playOrder']) as string
+      const playOrder = _.get(navPoint, ['$', 'playOrder']) as number
       const { hash: nodeId } = parseLink(path)
       let children = navPoint.navPoint
 
@@ -202,7 +201,7 @@ export class Epub {
         path,
         playOrder,
         children,
-      }
+      } as StructureItem
     }
 
     const parseNavPoints = (navPoints: GeneralObject[]) => {
@@ -255,6 +254,7 @@ export class Epub {
       const toc = await this._resolveXMLAsJsObject(tocPath)
       this._toc = toc
       this.structure = this._genStructure(toc)
+      this._getStructureContent()
     }
 
     this._manifest = manifest
@@ -267,6 +267,129 @@ export class Epub {
 
     return this
   }
+
+  resolvePath = (path: string): string => {
+    return this._root ? `${this._root}${path}` : path;
+  }
+
+
+  _getStructureContent() {
+    if (!this.structure) {
+      return;
+    }
+
+    let structure = this.structure
+
+    let flatStructure = flattenStructureItems(structure)
+
+    console.log('flat', flatStructure)
+
+    flatStructure = flatStructure.map((item: StructureItem) => {
+      const path = this.resolvePath(item.path.split('#').shift() as string)
+      item.filePath = path;
+      item.file = this._zip.files[path] as EPubFile
+      return item;
+    })
+
+    if (_.every(flatStructure, { file: { name: structure[0].filePath } })) {
+      this.structure = this._getContentFromSameFile(structure)
+    } else {
+      this.structure = this._getContentPerFile(structure)
+      // TODO: find files in Spine that are between files that are tagged.
+    }
+  }
+
+  _getContentFromSameFile(items: StructureItem[], nextParent?: StructureItem): StructureItem[] {
+    // const turndownService = new TurndownService();
+
+    const itemsWithContent = items.map((item: StructureItem, index: number) => {
+      const path = this.resolvePath(item.path.split('#').shift() as string);
+      item.filePath = path;
+      item.file = this._zip.files[path] as EPubFile;
+      return item;
+    }).map((item: StructureItem, index: number, items: StructureItem[]) => {
+      const nextItem = items[index + 1]
+      if (item.nodeId != null) {
+        if (nextItem && nextItem.nodeId != null && item.filePath === nextItem.filePath) {
+          item.nextNodeId = nextItem.nodeId;
+        } else if (nextParent && nextParent.nodeId != null && item.filePath === nextParent.filePath) {
+          item.nextNodeId = nextParent.nodeId;
+        }
+      }
+      item.content = getHTMLNodesBetweenNodes(item);
+      // console.log('item.content', item.name, item.nodeId, item.nextNodeId, item.content && turndownService.turndown(item.content))
+
+      if (item.children) {
+        item.children = this._getContentFromSameFile(item.children, nextItem);
+      }
+      return item;
+    });
+
+    // console.log('itemsWithContent[0]', itemsWithContent[0])
+    return itemsWithContent;
+  }
+
+  _getContentPerFile(items: StructureItem[]): StructureItem[] {
+    const itemsWithContent = items.map((item: StructureItem, index: number) => {
+      const path = this.resolvePath(item.path.split('#').shift() as string);
+      item.filePath = path;
+      item.file = this._zip.files[path] as EPubFile;
+
+      item.content = item.file._data;
+
+      if (item.children) {
+        item.children = this._getContentPerFile(item.children);
+      }
+      return item;
+    });
+
+    return itemsWithContent;
+  }
+}
+
+function getHTMLNodesBetweenNodes(item: StructureItem): HTMLElement | undefined {
+  const htmlContent = item.file!._data;
+  const dom = new JSDOM(htmlContent);
+  const document = dom.window.document;
+
+  const currentNode: HTMLElement | null = document.getElementById(item.nodeId!);
+  const nextNode: HTMLElement | null = document.getElementById(item.nextNodeId!);
+  if (currentNode) {
+    const elementsBetween = [];
+    let node = currentNode;
+    // console.log('node', node, node?.textContent, node?.nodeType, node === nextNode)
+
+    while (node && (node !== nextNode || node != null)) {
+      if (node.nodeType === 1) {
+        elementsBetween.push(node);
+      }
+      node = node.nextSibling as HTMLElement;
+      // console.log('node', node, node?.textContent, node?.nodeType, node === nextNode)
+    }
+
+    // wrap elements in a div
+    const wrapper = document.createElement('div');
+    elementsBetween.forEach((element) => {
+      wrapper.appendChild(element);
+    });
+
+    return wrapper;
+  }
+  return undefined
+}
+
+function flattenStructureItems(items: StructureItem[]): StructureItem[] {
+  const result: StructureItem[] = [];
+
+  function flatten(item: StructureItem) {
+    result.push(item);
+    if (item.children) {
+      item.children.forEach(flatten);
+    }
+  }
+
+  items.forEach(flatten);
+  return result;
 }
 
 export interface ParserOptions {

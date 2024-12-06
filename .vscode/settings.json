@@ -1,4 +1,4 @@
 {
-  "debug.node.autoAttach": "on",
-  "jest.jestCommandLine": "pnpm run test"
+  "jest.rootPath": "./",
+  "jest.jestCommandLine": "/Users/denstepa/Library/pnpm/jest"
 }
