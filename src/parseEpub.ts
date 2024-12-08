@@ -356,13 +356,15 @@ export class Epub {
 
     let flatStructure = flattenStructureItems(structure)
 
-    console.log('flat', flatStructure)
+    console.log('flat Structure', flatStructure)
 
     flatStructure = flatStructure.map((item: StructureItem) => {
       const path = this.resolvePath(item.path.split('#').shift() as string)
       item.filePath = path;
       return item;
     })
+
+    console.log('file names found')
 
     if (_.every(flatStructure, { filePath: flatStructure[0].filePath })) {
       console.log('parse content from same file')
