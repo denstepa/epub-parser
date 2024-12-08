@@ -5,7 +5,7 @@ import _ from 'lodash'
 import nodeZip from 'node-zip'
 import parseLink from './parseLink'
 import parseSection, { Section } from './parseSection'
-import { EPubFile, GeneralObject, StructureItem } from './types'
+import { EPubFileOptions, EPubFileType, GeneralObject, InitialMetadata, StructureItemType } from './types'
 import parseHTML from './parseHTML'
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown'
@@ -31,7 +31,6 @@ const determineRoot = (opfPath: string) => {
     // not at top level
     root = opfPath.replace(/\/([^\/]+)\.opf/i, '')
     if (!root.match(/\/$/)) {
-      // 以 '/' 结尾，下面的 zip 路径写法会简单很多
       root += '/'
     }
     if (root.match(/^\//)) {
@@ -58,6 +57,70 @@ const parseMetadata = (metadata: GeneralObject[]) => {
   return meta
 }
 
+class StructureItem {
+  name: string
+  sectionId?: string
+  nodeId?: string
+  nextNodeId?: string
+  path: string
+  playOrder?: number
+  children?: StructureItem[]
+  filePath?: string
+  content?: any
+  markdownContent?: string
+
+  constructor(item: StructureItemType) {
+    this.name = item.name;
+    this.sectionId = item.sectionId;
+    this.nodeId = item.nodeId;
+    this.nextNodeId = item.nextNodeId;
+    this.path = item.path;
+    this.playOrder = item.playOrder;
+    this.children = item.children;
+    this.filePath = item.filePath;
+    this.content = item.content;
+    this.markdownContent = item.markdownContent;
+  }
+
+}
+
+class EPubFile {
+  name: string;
+  dir: boolean;
+  date: Date;
+  comment: string | null;
+  unixPermissions: string | null;
+  dosPermissions: number;
+  _data: string;
+  options: EPubFileOptions;
+  _initialMetadata: InitialMetadata;
+  dom?: JSDOM;
+  document?: Document;
+
+  constructor(options: EPubFileType) {
+    this.name = options.name;
+    this.dir = options.dir;
+    this.date = options.date;
+    this.comment = options.comment;
+    this.unixPermissions = options.unixPermissions;
+    this.dosPermissions = options.dosPermissions;
+    this._data = options._data;
+    this.options = options.options;
+    this._initialMetadata = options._initialMetadata;
+  }
+
+  getHTMLDocument(): Document {
+    if (this.document != undefined) {
+      return this.document;
+    }
+    const htmlContent = this._data;
+    this.dom = new JSDOM(htmlContent);
+    this.document = this.dom.window.document;
+    return this.document;
+  }
+
+}
+
 export class Epub {
   private _zip: any // nodeZip instance
   private _opfPath?: string
@@ -75,10 +138,20 @@ export class Epub {
     publisher: string
   }
   sections?: Section[]
+  files: { [key: string]: EPubFile }
 
   constructor(buffer: Buffer) {
     this._zip = new nodeZip(buffer, { binary: true, base64: false, checkCRC32: true })
+    this.files = {}
+    _.mapKeys(this._zip.files, (value: EPubFile, key: string) => {
+      this.files[key] = new EPubFile(value)
+    })
+
     this.turndownService = new TurndownService();
+  }
+
+  getFile(item: StructureItem): EPubFile {
+    return this.files[item.filePath!] as EPubFile;
   }
 
   resolve(path: string): { asText: () => string } {
@@ -155,14 +228,14 @@ export class Epub {
 
       runningIndex++;
 
-      return {
+      return new StructureItem({
         name,
         sectionId,
         nodeId,
         path,
         playOrder,
         children,
-      } as StructureItem; 
+      }); 
     };
 
     const parseOuterHTML = (collection: GeneralObject[]): StructureItem[] => {
@@ -196,14 +269,14 @@ export class Epub {
 
       const sectionId = this._resolveIdFromLink(path)
 
-      return {
+      return new StructureItem({
         name,
         sectionId,
         nodeId,
         path,
         playOrder,
         children,
-      } as StructureItem
+      })
     }
 
     const parseNavPoints = (navPoints: GeneralObject[]) => {
@@ -288,13 +361,19 @@ export class Epub {
     flatStructure = flatStructure.map((item: StructureItem) => {
       const path = this.resolvePath(item.path.split('#').shift() as string)
       item.filePath = path;
-      item.file = this._zip.files[path] as EPubFile
       return item;
     })
 
-    if (_.every(flatStructure, { file: { name: structure[0].filePath } })) {
+    _.each(flatStructure, (item: StructureItem) => {
+      if(item.filePath != flatStructure[0].filePath) {
+        console.log("ERRO")
+      }
+    }) 
+
+    if (_.every(flatStructure, { filePath: flatStructure[0].filePath })) {
       this.structure = this._getContentFromSameFile(structure)
     } else {
+  
       this.structure = this._getContentPerFile(structure)
       // TODO: find files in Spine that are between files that are tagged.
     }
@@ -305,7 +384,7 @@ export class Epub {
     const itemsWithContent = items.map((item: StructureItem, index: number) => {
       const path = this.resolvePath(item.path.split('#').shift() as string);
       item.filePath = path;
-      item.file = this._zip.files[path] as EPubFile;
+      // item.file = this._zip.files[path] as EPubFile;
       return item;
     }).map((item: StructureItem, index: number, items: StructureItem[]) => {
       const nextItem = items[index + 1]
@@ -316,7 +395,7 @@ export class Epub {
           item.nextNodeId = nextParent.nodeId;
         }
       }
-      item.content = getHTMLNodesBetweenNodes(item);
+      item.content = this.getHTMLNodesBetweenNodes(item);
       item.markdownContent = item.content && this.turndownService!.turndown(item.content)
       // console.log('item.content', item.name, item.nodeId, item.nextNodeId, item.content && turndownService.turndown(item.content))
 
@@ -334,9 +413,9 @@ export class Epub {
     const itemsWithContent = items.map((item: StructureItem, index: number) => {
       const path = this.resolvePath(item.path.split('#').shift() as string);
       item.filePath = path;
-      item.file = this._zip.files[path] as EPubFile;
+      const file = this.getFile(item)
 
-      item.content = item.file._data;
+      item.content = file._data;
       item.markdownContent = item.content && this.turndownService!.turndown(item.content)
 
       if (item.children) {
@@ -347,38 +426,39 @@ export class Epub {
 
     return itemsWithContent;
   }
-}
 
-function getHTMLNodesBetweenNodes(item: StructureItem): HTMLElement | undefined {
-  const htmlContent = item.file!._data;
-  const dom = new JSDOM(htmlContent);
-  const document = dom.window.document;
-
-  const currentNode: HTMLElement | null = document.getElementById(item.nodeId!);
-  const nextNode: HTMLElement | null = document.getElementById(item.nextNodeId!);
-  if (currentNode) {
-    const elementsBetween = [];
-    let node = currentNode;
-    // console.log('node', node, node?.textContent, node?.nodeType, node === nextNode)
-
-    while (node && (node !== nextNode || node != null)) {
-      if (node.nodeType === 1) {
-        elementsBetween.push(node);
-      }
-      node = node.nextSibling as HTMLElement;
+  getHTMLNodesBetweenNodes(item: StructureItem): HTMLElement | undefined {
+    const file = this.getFile(item)
+    const document = file.getHTMLDocument()
+  
+    const currentNode: HTMLElement | null = document.getElementById(item.nodeId!);
+    const nextNode: HTMLElement | null = document.getElementById(item.nextNodeId!);
+    if (currentNode) {
+      const elementsBetween = [];
+      let node = currentNode;
       // console.log('node', node, node?.textContent, node?.nodeType, node === nextNode)
+  
+      while (node && (node !== nextNode || node != null)) {
+        if (node.nodeType === 1) {
+          elementsBetween.push(node);
+        }
+        node = node.nextSibling as HTMLElement;
+        // console.log('node', node, node?.textContent, node?.nodeType, node === nextNode)
+      }
+  
+      // wrap elements in a div
+      const wrapper = document.createElement('div');
+      elementsBetween.forEach((element) => {
+        wrapper.appendChild(element);
+      });
+  
+      return wrapper;
     }
-
-    // wrap elements in a div
-    const wrapper = document.createElement('div');
-    elementsBetween.forEach((element) => {
-      wrapper.appendChild(element);
-    });
-
-    return wrapper;
+    return undefined
   }
-  return undefined
 }
+
+
 
 function flattenStructureItems(items: StructureItem[]): StructureItem[] {
   const result: StructureItem[] = [];

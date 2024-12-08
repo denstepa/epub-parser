@@ -14,21 +14,20 @@ export interface HtmlNodeObject {
   }
 }
 
-export type StructureItem = {
+export type StructureItemType = {
   name: string,
   sectionId?: string,
   nodeId?: string,
   nextNodeId?: string,
   path: string
   playOrder?: number,
-  children?: StructureItem[]
+  children?: StructureItemType[]
   filePath?: string
-  file?: EPubFile
   content?: any
   markdownContent?: string
 }
 
-export interface EPubFile {
+export interface EPubFileType {
   name: string;
   dir: boolean;
   date: Date;
