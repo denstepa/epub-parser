@@ -57,7 +57,7 @@ const parseMetadata = (metadata: GeneralObject[]) => {
   return meta
 }
 
-class StructureItem {
+export class StructureItem {
   name: string
   sectionId?: string
   nodeId?: string
@@ -76,15 +76,28 @@ class StructureItem {
     this.nextNodeId = item.nextNodeId;
     this.path = item.path;
     this.playOrder = item.playOrder;
-    this.children = item.children;
+    this.children = item.children?.map((child: StructureItemType) => new StructureItem(child));
     this.filePath = item.filePath;
     this.content = item.content;
     this.markdownContent = item.markdownContent;
   }
 
+  toJSON(): StructureItemType {
+    return {
+      name: this.name,
+      sectionId: this.sectionId,
+      nodeId: this.nodeId,
+      nextNodeId: this.nextNodeId,
+      path: this.path,
+      playOrder: this.playOrder,
+      children: this.children?.map((child: StructureItem) => child.toJSON()),
+      filePath: this.filePath,
+      markdownContent: this.markdownContent,
+    }
+  }
 }
 
-class EPubFile {
+export class EPubFile {
   name: string;
   dir: boolean;
   date: Date;
@@ -438,7 +451,7 @@ export class Epub {
       let node = currentNode;
       // console.log('node', node, node?.textContent, node?.nodeType, node === nextNode)
   
-      while (node && (node !== nextNode || node != null)) {
+      while (node && (node !== nextNode )) {
         if (node.nodeType === 1) {
           elementsBetween.push(node);
         }
