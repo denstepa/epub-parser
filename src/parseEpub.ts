@@ -382,7 +382,6 @@ export class Epub {
     const itemsWithContent = items.map((item: StructureItem, index: number) => {
       const path = this.resolvePath(item.path.split('#').shift() as string);
       item.filePath = path;
-      // item.file = this._zip.files[path] as EPubFile;
       return item;
     }).map((item: StructureItem, index: number, items: StructureItem[]) => {
       const nextItem = items[index + 1]
@@ -392,10 +391,10 @@ export class Epub {
         } else if (nextParent && nextParent.nodeId != null && item.filePath === nextParent.filePath) {
           item.nextNodeId = nextParent.nodeId;
         }
+        item.content = this.getHTMLNodesBetweenNodes(item);
+        item.markdownContent = item.content && this.turndownService!.turndown(item.content)
+        // console.log('item.content', item.name, item.nodeId, item.nextNodeId, item.content && turndownService.turndown(item.content))  
       }
-      item.content = this.getHTMLNodesBetweenNodes(item);
-      item.markdownContent = item.content && this.turndownService!.turndown(item.content)
-      // console.log('item.content', item.name, item.nodeId, item.nextNodeId, item.content && turndownService.turndown(item.content))
 
       if (item.children) {
         item.children = this._getContentFromSameFile(item.children, nextItem);
@@ -411,7 +410,10 @@ export class Epub {
     const itemsWithContent = items.map((item: StructureItem, index: number) => {
       const path = this.resolvePath(item.path.split('#').shift() as string);
       item.filePath = path;
+      return item;
+    }).map((item: StructureItem, index: number) => {
       const file = this.getFile(item)
+      const nextItem = items[index + 1]
 
       item.content = file._data;
       item.markdownContent = item.content && this.turndownService!.turndown(item.content)
@@ -425,7 +427,7 @@ export class Epub {
     return itemsWithContent;
   }
 
-  getHTMLNodesBetweenNodes(item: StructureItem): HTMLElement | undefined {
+  getHTMLNodesBetweenNodes(item: StructureItem): string | undefined {
     const file = this.getFile(item)
     const document = file.getHTMLDocument()
   
@@ -445,15 +447,28 @@ export class Epub {
       }
   
       // wrap elements in a div
-      const wrapper = document.createElement('div');
-      elementsBetween.forEach((element) => {
-        wrapper.appendChild(element);
-      });
+      // create a new document fragment
+      // Create new document and wrapper
+      // const newDoc = document.implementation.createHTMLDocument();
+      // const wrapper = newDoc.createElement('div');
+
+      // // Clone and append each element
+      // elementsBetween.forEach((element) => {
+      //   const clonedElement = element.cloneNode(true); // Deep clone with all children
+      //   wrapper.appendChild(clonedElement);
+      // });
   
-      return wrapper;
+      return getHTMLString(elementsBetween);
     }
     return undefined
   }
+}
+
+const getHTMLString = (elementsBetween: HTMLElement[]): string => {
+  const elements = elementsBetween
+    .map(element => element.outerHTML)
+    .join('\n');
+  return `<div>${elements}</div>`;
 }
 
 function flattenStructureItems(items: StructureItem[]): StructureItem[] {
