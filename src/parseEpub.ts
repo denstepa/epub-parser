@@ -364,19 +364,15 @@ export class Epub {
       return item;
     })
 
-    _.each(flatStructure, (item: StructureItem) => {
-      if(item.filePath != flatStructure[0].filePath) {
-        console.log("ERRO")
-      }
-    }) 
-
     if (_.every(flatStructure, { filePath: flatStructure[0].filePath })) {
+      console.log('parse content from same file')
       this.structure = this._getContentFromSameFile(structure)
     } else {
-  
+      console.log('parse content from separate file')
       this.structure = this._getContentPerFile(structure)
       // TODO: find files in Spine that are between files that are tagged.
     }
+    console.log('structure parsed')
   }
 
   _getContentFromSameFile(items: StructureItem[], nextParent?: StructureItem): StructureItem[] {
@@ -457,8 +453,6 @@ export class Epub {
     return undefined
   }
 }
-
-
 
 function flattenStructureItems(items: StructureItem[]): StructureItem[] {
   const result: StructureItem[] = [];
