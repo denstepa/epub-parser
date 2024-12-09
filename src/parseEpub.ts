@@ -57,7 +57,7 @@ const parseMetadata = (metadata: GeneralObject[]) => {
   return meta
 }
 
-export class StructureItem {
+class StructureItem {
   name: string
   sectionId?: string
   nodeId?: string
@@ -380,12 +380,15 @@ export class Epub {
     let flatStructure = flattenStructureItems(structure)
 
     console.log('flat Structure', flatStructure)
+    console.log('flat Structure', flatStructure)
 
     flatStructure = flatStructure.map((item: StructureItem) => {
       const path = this.resolvePath(item.path.split('#').shift() as string)
       item.filePath = path;
       return item;
     })
+
+    console.log('file names found')
 
     console.log('file names found')
 
@@ -433,6 +436,8 @@ export class Epub {
     const itemsWithContent = items.map((item: StructureItem, index: number) => {
       const path = this.resolvePath(item.path.split('#').shift() as string);
       item.filePath = path;
+      return item;
+    }).map((item: StructureItem, index: number) => {
       return item;
     }).map((item: StructureItem, index: number) => {
       const file = this.getFile(item)
@@ -516,6 +521,7 @@ export class Epub {
       // console.log('node', node, node?.textContent, node?.nodeType, node === nextNode)
   
       while (node && (node !== nextNode )) {
+      while (node && (node !== nextNode )) {
         if (node.nodeType === 1) {
           elementsBetween.push(node);
         }
@@ -524,6 +530,7 @@ export class Epub {
       return getHTMLString(elementsBetween);
     }
     return undefined
+    }
   }
 }
 
