@@ -5,8 +5,7 @@ import _ from 'lodash'
 import nodeZip from 'node-zip'
 import parseLink from './parseLink'
 import parseSection, { Section } from './parseSection'
-import { EPubFileOptions, EPubFileType, GeneralObject, HtmlNodeObject, InitialMetadata, StructureItemType } from './types'
-import parseHTML from './parseHTML'
+import { EPubFileOptions, EPubFileType, GeneralObject, InitialMetadata, StructureItemType } from './types'
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown'
 
@@ -57,7 +56,7 @@ const parseMetadata = (metadata: GeneralObject[]) => {
   return meta
 }
 
-class StructureItem {
+export class StructureItem {
   name: string
   sectionId?: string
   nodeId?: string
