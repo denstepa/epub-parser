@@ -6,7 +6,6 @@ import nodeZip from 'node-zip'
 import parseLink from './parseLink'
 import parseSection, { Section } from './parseSection'
 import { EPubFileOptions, EPubFileType, GeneralObject, InitialMetadata, StructureItemType } from './types'
-import parseHTML from './parseHTML'
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown'
 
@@ -67,6 +66,7 @@ export class StructureItem {
   children?: StructureItem[]
   filePath?: string
   content?: any
+  sections?: Section[]
   markdownContent?: string
 
   constructor(item: StructureItemType) {
@@ -165,6 +165,14 @@ export class Epub {
 
   getFile(item: StructureItem): EPubFile {
     return this.files[item.filePath!] as EPubFile;
+  }
+
+  getFileByPath(path: string): EPubFile {
+    return this.files[path] as EPubFile;
+  }
+
+  getSEctionById(id: string): Section | undefined {
+    return this.sections?.find((section: Section) => section.id === id);
   }
 
   resolve(path: string): { asText: () => string } {
@@ -337,6 +345,14 @@ export class Epub {
       // https://www.w3.org/TR/epub/#sec-nav-prop
       tocPath = _.find(manifest, { properties: 'nav'})?.href
     }
+    this._manifest = manifest
+    this._content = content
+    this._opfPath = opfPath
+    this._spine = this._getSpine()
+    this._metadata = metadata
+    this.info = parseMetadata(metadata)
+    this.sections = this._resolveSectionsFromSpine(expand)
+
 
     if (tocPath) {
       const toc = await this._resolveXMLAsJsObject(tocPath)
@@ -345,13 +361,6 @@ export class Epub {
       this._getStructureContent()
     }
 
-    this._manifest = manifest
-    this._content = content
-    this._opfPath = opfPath
-    this._spine = this._getSpine()
-    this._metadata = metadata
-    this.info = parseMetadata(metadata)
-    this.sections = this._resolveSectionsFromSpine(expand)
     return this
   }
 
@@ -370,12 +379,15 @@ export class Epub {
     let flatStructure = flattenStructureItems(structure)
 
     console.log('flat Structure', flatStructure)
+    console.log('flat Structure', flatStructure)
 
     flatStructure = flatStructure.map((item: StructureItem) => {
       const path = this.resolvePath(item.path.split('#').shift() as string)
       item.filePath = path;
       return item;
     })
+
+    console.log('file names found')
 
     console.log('file names found')
 
@@ -425,11 +437,24 @@ export class Epub {
       item.filePath = path;
       return item;
     }).map((item: StructureItem, index: number) => {
+      return item;
+    }).map((item: StructureItem, index: number) => {
       const file = this.getFile(item)
       const nextItem = items[index + 1]
 
-      item.content = file._data;
-      item.markdownContent = item.content && this.turndownService!.turndown(item.content)
+      if (this._spine == null || nextItem == null) {
+        const file = this.getFile(item)
+        item.content = file._data;
+        item.markdownContent = item.content && this.turndownService!.turndown(item.content)
+      } else if (item.sectionId == null || nextItem.sectionId == null) {
+        const file = this.getFile(item)
+        item.content = file._data;
+        item.markdownContent = item.content && this.turndownService!.turndown(item.content)
+      } else {
+        item.sections =  this._getContentBetweenItems(item, nextItem)
+        item.content = item.sections.map((section: Section) => section.htmlString!).join('\n');
+        item.markdownContent = item.sections.map((section: Section) => section.toMarkdown()).join('\n');
+      }
 
       if (item.children) {
         item.children = this._getContentPerFile(item.children);
@@ -438,6 +463,49 @@ export class Epub {
     });
 
     return itemsWithContent;
+  }
+
+  _getContentBetweenItems(item: StructureItem, nextItem: StructureItem): Section[] {
+    // if (this._spine == null || nextItem == null) {
+    //   const file = this.getFile(item)
+    //   return file._data;
+    // }
+
+    // if (item.sectionId == null || nextItem.sectionId == null) {
+    //   const file = this.getFile(item)
+    //   return file._data;
+    // }
+
+    // get elements in spine between item and until nextItem
+    const spine = this._spine!;
+    const startIndex = spine.indexOf(item.sectionId!);
+    const endIndex = spine.indexOf(nextItem.sectionId!);
+    const sections: Section[] = _.compact(spine.slice(startIndex, endIndex).map((sectionId: string) => {
+      const section: Section | undefined = this.getSEctionById(sectionId);
+      return section;
+    }));
+    // const htmlObjects: HtmlNodeObject[] = _.reduce(sections, (result: HtmlNodeObject[], section: Section | undefined) => {
+    //   if (section != undefined && section.htmlObjects != undefined) {
+    //     result.push(...section.htmlObjects);
+    //   }
+    //   return result;
+    // }, []);
+
+
+    // const dom = new JSDOM();
+    // const document = dom.window.document;
+    // const container = document.createElement('div');
+    // htmlObjects.forEach((htmlObject: HtmlNodeObject) => {
+    //   const element = document.createElement(htmlObject.tag || 'div');
+    //   element.innerHTML = htmlObject.text || '';
+    //   // handle children
+
+
+    //   container.appendChild(element);
+    // })
+    // return container;
+    // return `<div>${sections.map((section: Section) => section.htmlString!).join('\n')}</div>`;
+    return sections;
   }
 
   getHTMLNodesBetweenNodes(item: StructureItem): string | undefined {
@@ -452,28 +520,16 @@ export class Epub {
       // console.log('node', node, node?.textContent, node?.nodeType, node === nextNode)
   
       while (node && (node !== nextNode )) {
+      while (node && (node !== nextNode )) {
         if (node.nodeType === 1) {
           elementsBetween.push(node);
         }
         node = node.nextSibling as HTMLElement;
-        // console.log('node', node, node?.textContent, node?.nodeType, node === nextNode)
-      }
-  
-      // wrap elements in a div
-      // create a new document fragment
-      // Create new document and wrapper
-      // const newDoc = document.implementation.createHTMLDocument();
-      // const wrapper = newDoc.createElement('div');
-
-      // // Clone and append each element
-      // elementsBetween.forEach((element) => {
-      //   const clonedElement = element.cloneNode(true); // Deep clone with all children
-      //   wrapper.appendChild(clonedElement);
-      // });
-  
+      }  
       return getHTMLString(elementsBetween);
     }
     return undefined
+    }
   }
 }
 
