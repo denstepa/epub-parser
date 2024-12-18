@@ -34,9 +34,10 @@ export class Section {
       this.htmlObjects = this.toHtmlObjects?.()
     }
     this.turndownService = new TurndownService()
+    this.turndownService.remove('title')
   }
 
-  toMarkdown?() {
+  toMarkdown(): string {
     return this.turndownService.turndown(this.htmlString)
   }
 
