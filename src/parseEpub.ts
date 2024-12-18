@@ -5,7 +5,7 @@ import _ from 'lodash'
 import nodeZip from 'node-zip'
 import parseLink from './parseLink'
 import parseSection, { Section } from './parseSection'
-import { EPubFileOptions, EPubFileType, GeneralObject, InitialMetadata, StructureItemType } from './types'
+import { EPubFileOptions, EPubFileType, GeneralObject, InitialMetadata, ManifestItem, StructureItemType } from './types'
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown'
 
@@ -55,6 +55,8 @@ const parseMetadata = (metadata: GeneralObject[]) => {
   }
   return meta
 }
+
+
 
 export class StructureItem {
   name: string
@@ -135,11 +137,13 @@ export class EPubFile {
 }
 
 export class Epub {
+  public isParsed: boolean = false
+  
   private _zip: any // nodeZip instance
   private _opfPath?: string
   private _root?: string
   private _content?: GeneralObject
-  private _manifest?: any[]
+  private _manifest?: ManifestItem[]
   private _spine?: string[] // array of ids defined in manifest
   private _toc?: GeneralObject
   private _metadata?: GeneralObject
@@ -152,6 +156,8 @@ export class Epub {
   }
   sections?: Section[]
   files: { [key: string]: EPubFile }
+  public packageVersion?: number;
+  createdWith?: string;
 
   constructor(buffer: Buffer) {
     this._zip = new nodeZip(buffer, { binary: true, base64: false, checkCRC32: true })
@@ -202,10 +208,10 @@ export class Epub {
     return opfPath
   }
 
-  _getManifest(content: GeneralObject) {
+  _getManifest(content: GeneralObject): ManifestItem[] {
     return _.get(content, ['package', 'manifest', 0, 'item'], []).map(
-      (item: any) => item.$,
-    ) as any[]
+      (item: any) => item.$ as ManifestItem,
+    ) as ManifestItem[]
   }
 
   _resolveIdFromLink(href: string) {
@@ -312,47 +318,61 @@ export class Epub {
   _resolveSectionsFromSpine(expand = false) {
     // no chain
     return _.map(_.union(this._spine), (id) => {
-      const path = _.find(this._manifest, { id }).href
+      const path = _.find(this._manifest as ManifestItem[], { id })?.href
+      if (!path) {
+        throw new Error(`Path not found for id: ${id}`);
+      }
       const html = this.resolve(path).asText()
 
       return parseSection({
         id,
         htmlString: html,
         resourceResolver: this.resolve.bind(this),
+        // @ts-ignore
         idResolver: this._resolveIdFromLink.bind(this),
         expand,
       })
     })
   }
 
-  async parse(expand = false) {
-    const opfPath = await this._getOpfPath()
-    this._root = determineRoot(opfPath)
+  _identifyCreationSoftware(): string | undefined {
+    try { 
+      const item = _.get(this._metadata, [0, 'meta'], []);
+      const sigilVersion = _.find(item, obj => _.get(obj, '$.name') === 'Sigil version')?.$.content;
+      if (sigilVersion) {
+        return `Sigil ${sigilVersion}`;
+      }
+    } catch (e) {
+      console.error('Error identifying creation software', e);
+    }
 
-    const content = await this._resolveXMLAsJsObject('/' + opfPath)
-    const manifest = this._getManifest(content)
-    const metadata = _.get(content, ['package', 'metadata'], [])
-    const tocID = _.get(content, ['package', 'spine', 0, '$', 'toc']);
+    return undefined;
+  }
 
+  _getTOCPath() {
+    if (this.packageVersion != undefined && this.packageVersion >= 3) {
+      // https://www.w3.org/TR/epub/#sec-nav-prop
+      // for V3 we should first look at the "nav" property.
+      const navItem: ManifestItem | undefined = _.find(this._manifest, { properties: 'nav' })
+      if (navItem != undefined) {
+        return navItem.href
+      }
+    }
+    const tocID = _.get(this._content, ['package', 'spine', 0, '$', 'toc']);
     // https://github.com/gaoxiaoliangz/epub-parser/issues/13
     // https://www.w3.org/publishing/epub32/epub-packages.html#sec-spine-elem
 
-    let tocPath: string;
     if (tocID) {
-      tocPath = (_.find(manifest, { id: tocID }) || {}).href
+      return (_.find(this._manifest, { id: tocID }) || {}).href
     } else {
       // Based on the EPUB spec, the toc file should be declared in the manifest with the property 'nav'
       // https://www.w3.org/TR/epub/#sec-nav-prop
-      tocPath = _.find(manifest, { properties: 'nav'})?.href
+      return _.find(this._manifest, { properties: 'nav'})?.href
     }
-    this._manifest = manifest
-    this._content = content
-    this._opfPath = opfPath
-    this._spine = this._getSpine()
-    this._metadata = metadata
-    this.info = parseMetadata(metadata)
-    this.sections = this._resolveSectionsFromSpine(expand)
+  }
 
+  async _getTOC() {
+    const tocPath = this._getTOCPath()
 
     if (tocPath) {
       const toc = await this._resolveXMLAsJsObject(tocPath)
@@ -360,6 +380,27 @@ export class Epub {
       this.structure = this._genStructure(toc)
       this._getStructureContent()
     }
+  }
+
+  async parse(expand = false) {
+    const opfPath = await this._getOpfPath()
+    this._root = determineRoot(opfPath)
+    this._content = await this._resolveXMLAsJsObject('/' + opfPath)
+
+    this.packageVersion = _.parseInt(_.get(this._content, ['package', '$', 'version']))
+
+    this._manifest = this._getManifest(this._content as GeneralObject)
+    this._metadata = _.get(this._content, ['package', 'metadata'], [])
+    this.createdWith = this._identifyCreationSoftware()
+    
+    
+    this._opfPath = opfPath
+    this._spine = this._getSpine()
+    this.info = parseMetadata(this._metadata as GeneralObject[])
+    this.sections = this._resolveSectionsFromSpine(expand)
+
+    await this._getTOC()
+    this.isParsed = true
 
     return this
   }
@@ -367,7 +408,6 @@ export class Epub {
   resolvePath = (path: string): string => {
     return this._root ? `${this._root}${path}` : path;
   }
-
 
   _getStructureContent() {
     if (!this.structure) {
@@ -377,9 +417,6 @@ export class Epub {
     let structure = this.structure
 
     let flatStructure = flattenStructureItems(structure)
-
-    console.log('flat Structure', flatStructure)
-    console.log('flat Structure', flatStructure)
 
     flatStructure = flatStructure.map((item: StructureItem) => {
       const path = this.resolvePath(item.path.split('#').shift() as string)
@@ -391,7 +428,9 @@ export class Epub {
 
     console.log('file names found')
 
-    if (_.every(flatStructure, { filePath: flatStructure[0].filePath })) {
+    if (flatStructure.length === 1) {
+      this.structure = [this._getStructureForOneNode(flatStructure[0])]
+    } else if (_.every(flatStructure, { filePath: flatStructure[0].filePath })) {
       console.log('parse content from same file')
       this.structure = this._getContentFromSameFile(structure)
     } else {
@@ -401,9 +440,15 @@ export class Epub {
     }
     console.log('structure parsed')
   }
+  
+  _getStructureForOneNode(item: StructureItem): StructureItem {
+    const file = this.getFile(item)
+    item.content = file._data;
+    item.markdownContent = item.content && this.turndownService!.turndown(item.content)
+    return item;
+  }
 
   _getContentFromSameFile(items: StructureItem[], nextParent?: StructureItem): StructureItem[] {
-
     const itemsWithContent = items.map((item: StructureItem, index: number) => {
       const path = this.resolvePath(item.path.split('#').shift() as string);
       item.filePath = path;
@@ -568,5 +613,6 @@ export default function parserWrapper(target: string | Buffer, options: ParserOp
   if (type === 'path' || (typeof target === 'string' && fs.existsSync(target))) {
     _target = fs.readFileSync(target as string, 'binary')
   }
+  
   return new Epub(_target as Buffer).parse(expand)
 }

@@ -57,3 +57,11 @@ export interface InitialMetadata {
   dir: boolean;
   date: Date;
 }
+
+export interface ManifestItem {
+  id: string
+  href: string
+  mediaType: string
+  properties?: string
+  fallback?: string
+}
