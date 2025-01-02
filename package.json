@@ -1,6 +1,6 @@
 {
   "name": "@denstepa/epub-parser",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "A powerful yet easy-to-use epub parser",
   "packageManager": "pnpm@9.14.3+sha256.652c47dac7c2b9350db4cdb9330c087d527114a0c2dff4cbac7ea9b96be928bd",
   "main": "lib/index.js",
@@ -12,7 +12,7 @@
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx,json,md,css,scss}\"",
     "test": "jest",
     "test-debug": "node --inspect-brk -r ts-node/register node_modules/.bin/jest --runInBand",
-    "v": "standard-version --preset angular",
+    "release": "standard-version --preset angular",
     "postv": "git push --follow-tags origin master",
     "prepare": "pnpm build"
   },

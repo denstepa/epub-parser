@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## 2.2.1 (2025-01-02)
+
+
+### Bug Fixes
+
+* fix issue [#18](https://github.com/denstepa/epub-parser/issues/18) ([d979ff4](https://github.com/denstepa/epub-parser/commit/d979ff46b4dee8247af2e363f646690316505e43))
+
+
+
 ## [2.0.4](https://github.com/gaoxiaoliangz/epub-parser/compare/v2.0.3...v2.0.4) (2021-07-26)
 
 
