@@ -230,8 +230,54 @@ export class Epub {
       },
     )
   }
+  
+  _genStructureForHTML_v3(tocPath: string): StructureItem[] {
+    const tocContent: string = this.resolve(tocPath).asText()
+    const dom = new JSDOM(tocContent);
 
-  _genStructureForHTML(tocObj: GeneralObject): StructureItem[] {
+    const tocRoot: HTMLCollection | undefined = dom.window.document.querySelector('nav[epub:type="toc"] ol')?.children;
+    if (tocRoot == undefined) {
+      throw new Error('No toc root found');
+    }
+
+    let runningIndex = 1;
+
+    const parseHTMLNavPoints = (element: Element): StructureItem => {
+      const aElement = element.querySelector('a');
+      let name = '';
+      let path = '';
+      if (aElement != null) {
+        path = aElement.getAttribute('href') || '';
+        name = _.trim(aElement.textContent || '');  
+      }
+      const sectionId = this._resolveIdFromLink(path);
+      const { hash: nodeId } = parseLink(path)
+
+      const childrenElements: HTMLCollection | undefined = element.querySelector('ol')?.children;
+      let children;
+
+      const playOrder = runningIndex;
+
+      if (childrenElements != undefined) {
+        children = _.map(childrenElements, parseHTMLNavPoints);
+      }
+
+      runningIndex++;
+
+      return new StructureItem({
+        name,
+        sectionId,
+        nodeId,
+        path,
+        playOrder,
+        children,
+      }); 
+    };
+
+    return _.map(tocRoot, parseHTMLNavPoints);  
+  }
+
+  _genStructureForHTML(tocObj: GeneralObject): StructureItem[] {    
     const tocRoot = tocObj.html.body[0].nav[0]['ol'][0].li;
     let runningIndex = 1;
 
@@ -350,14 +396,6 @@ export class Epub {
   }
 
   _getTOCPath() {
-    if (this.packageVersion != undefined && this.packageVersion >= 3) {
-      // https://www.w3.org/TR/epub/#sec-nav-prop
-      // for V3 we should first look at the "nav" property.
-      const navItem: ManifestItem | undefined = _.find(this._manifest, { properties: 'nav' })
-      if (navItem != undefined) {
-        return navItem.href
-      }
-    }
     const tocID = _.get(this._content, ['package', 'spine', 0, '$', 'toc']);
     // https://github.com/gaoxiaoliangz/epub-parser/issues/13
     // https://www.w3.org/publishing/epub32/epub-packages.html#sec-spine-elem
@@ -371,14 +409,30 @@ export class Epub {
     }
   }
 
-  async _getTOC() {
-    const tocPath = this._getTOCPath()
+  async _getTOC_v3() {
+    if (this.packageVersion != undefined && this.packageVersion < 3) {
+      return undefined;
+    }
 
-    if (tocPath) {
+    // https://www.w3.org/TR/epub/#sec-nav-prop
+    // for V3 we should first look at the "nav" property.
+    const navItem: ManifestItem | undefined = _.find(this._manifest, { properties: 'nav' })
+    if (navItem == undefined) {
+      return undefined;
+    }
+    const tocPath: string = navItem.href;
+    const toc = await this._resolveXMLAsJsObject(tocPath);
+    this._toc = toc;
+    this.structure = this._genStructureForHTML_v3(tocPath);
+  }
+
+  async _getTOC() {
+    const tocPath: string | undefined = this._getTOCPath()
+
+    if (tocPath != undefined) {
       const toc = await this._resolveXMLAsJsObject(tocPath)
       this._toc = toc
       this.structure = this._genStructure(toc)
-      this._getStructureContent()
     }
   }
 
@@ -399,7 +453,18 @@ export class Epub {
     this.info = parseMetadata(this._metadata as GeneralObject[])
     this.sections = this._resolveSectionsFromSpine(expand)
 
-    await this._getTOC()
+    try {
+      if (this.packageVersion != undefined && this.packageVersion >= 3) {
+        await this._getTOC_v3()
+      }  
+    } catch (e) {
+      console.error('Error getting TOC for V3', e);
+    }
+    if (this.structure == undefined) {
+      await this._getTOC()
+    }
+    this._getStructureContent()
+
     this.isParsed = true
 
     return this
@@ -424,10 +489,6 @@ export class Epub {
       return item;
     })
 
-    console.log('file names found')
-
-    console.log('file names found')
-
     if (flatStructure.length === 1) {
       this.structure = [this._getStructureForOneNode(flatStructure[0])]
     } else if (_.every(flatStructure, { filePath: flatStructure[0].filePath })) {
@@ -438,7 +499,7 @@ export class Epub {
       this.structure = this._getContentPerFile(structure)
       // TODO: find files in Spine that are between files that are tagged.
     }
-    console.log('structure parsed')
+    // console.log('structure parsed')
   }
   
   _getStructureForOneNode(item: StructureItem): StructureItem {
