@@ -13,7 +13,7 @@
     "test": "jest",
     "test-debug": "node --inspect-brk -r ts-node/register node_modules/.bin/jest --runInBand",
     "release": "standard-version --preset angular",
-    "postv": "git push --follow-tags origin master",
+    "push": "git push --follow-tags origin master",
     "prepare": "pnpm build"
   },
   "repository": {

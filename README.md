@@ -70,3 +70,8 @@ The output is an object which contains `structure`, `sections`, `info`(private p
 
 # EPUB Specification:
 https://www.w3.org/TR/epub/#sec-nav-prop
+
+# Publishing Package
+1. `pnpm release`
+2. `pnpm push`
+3. `pnpm publish --no-git-checks`
