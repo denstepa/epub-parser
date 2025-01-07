@@ -296,3 +296,29 @@ describe('Garbage File - cm2v0d1zn000311039g8acyl9', () => {
 // filesToBeTested.forEach((filename) => {
 //   testFile(filename)
 // })
+
+
+describe('dokumen.pub_outlive-the-science-and-art-of-longevity-9780593236598-9780593236604', () => {
+  const fileName = 'dokumen.pub_outlive-the-science-and-art-of-longevity-9780593236598-9780593236604'
+  const fileContent = parser(path.join(baseDir, `fixtures/${fileName}.epub`), {
+    type: 'path',
+    expand: true,
+  })
+
+  const resultFileName = `fixtures/${fileName}.json`
+  const overwrite = false
+
+  test('Result should have structure', async () => {
+    const result: Epub = await fileContent
+    const spineContent = result.getContentFromSpine()
+    if (overwrite && spineContent){
+      saveStructure(resultFileName, spineContent)
+    } else {
+      const expectedStructure = JSON.parse(fs.readFileSync(resultFileName, 'utf-8'))
+      expect(getJSONStructure(spineContent)).toEqual(expectedStructure)
+    }
+
+    expect(result.structure).not.toBe(undefined)
+    expect(fileContent && typeof fileContent).toBe('object')
+  })
+})

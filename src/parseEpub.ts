@@ -56,8 +56,6 @@ const parseMetadata = (metadata: GeneralObject[]) => {
   return meta
 }
 
-
-
 export class StructureItem {
   name: string
   sectionId?: string
@@ -136,6 +134,28 @@ export class EPubFile {
 
 }
 
+export class SpineItem {
+  idRef: string;
+  html: string;
+  path: string;
+  // dom: JSDOM;
+  // content: HTMLBodyElement | null | undefined;
+  turndownService: TurndownService;
+
+  constructor(idRef: string, path: string, html: string) {
+    this.idRef = idRef
+    this.path = path
+    this.html = html
+    // this.dom = new JSDOM(html);
+    // this.content = this.dom.window.document.querySelector('body');
+    this.turndownService = new TurndownService();
+  }
+
+  toMarkdown(): string {
+    return this.turndownService!.turndown(this.html)
+  }
+}
+
 export class Epub {
   public isParsed: boolean = false
   
@@ -145,6 +165,8 @@ export class Epub {
   private _content?: GeneralObject
   private _manifest?: ManifestItem[]
   private _spine?: string[] // array of ids defined in manifest
+
+  private _spineItems?: SpineItem[]
   private _toc?: GeneralObject
   private _metadata?: GeneralObject
   private turndownService: TurndownService
@@ -229,6 +251,33 @@ export class Epub {
         return item.$.idref
       },
     )
+  }
+
+  getContentFromSpine(): StructureItem[] {
+    if (this.isParsed == false || this._spine == undefined) {
+      this._getSpine()
+    }
+    this._spineItems = [];
+    return this._spine!.map((id) => {
+      const path: string | undefined = _.find(this._manifest, { id })?.href
+      if (path == undefined) {
+        throw new Error(`Path not found for id: ${id}`);
+      }
+      const html = this.resolve(path).asText()
+
+      const item = new SpineItem(id, path, html)
+      this._spineItems?.push(item)
+      return item;
+    }).map((item: SpineItem, index: number) => {
+      return new StructureItem({
+        name: item.idRef,
+        sectionId: item.idRef,
+        path: item.path,
+        playOrder: index + 1,
+        content: item.html,
+        markdownContent: item.toMarkdown(),
+      })
+    })
   }
   
   _genStructureForHTML_v3(tocPath: string): StructureItem[] {
